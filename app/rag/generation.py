@@ -8,13 +8,14 @@ load_dotenv()
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:1.5b")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 EXACT_INSUFFICIENT_MSG = "There is not enough information in the uploaded documents to answer this."
 
 
 async def query_local_llm(question: str, context_chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Sends retrieved chunks and question to local Ollama (Llama 3).
+    Sends retrieved chunks and question to LLM (Ollama locally or Groq Llama 3 online).
     Strictly enforces context grounding and returns source citations.
     """
     if not context_chunks:
@@ -49,50 +50,83 @@ async def query_local_llm(question: str, context_chunks: List[Dict[str, Any]]) -
 
     user_prompt = f"Context:\n{formatted_context}\n\nQuestion:\n{question}\n\nAnswer:"
 
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "stream": False,
-        "keep_alive": "24h",
-        "options": {
-            "temperature": 0.0,
-            "num_predict": 300,
-            "num_ctx": 2048,
-            "top_k": 20,
-            "top_p": 0.9
+    answer_text = ""
+
+    # 1. Cloud Mode (Groq Llama 3 for online deployment if GROQ_API_KEY is present)
+    if GROQ_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {GROQ_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama-3.1-8b-instant",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.0,
+                        "max_tokens": 350
+                    }
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                answer_text = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            return {
+                "answer": f"Cloud LLM Error: {str(e)}",
+                "sources": []
+            }
+
+    # 2. Local Ollama Mode
+    else:
+        payload = {
+            "model": OLLAMA_MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "stream": False,
+            "keep_alive": "24h",
+            "options": {
+                "temperature": 0.0,
+                "num_predict": 300,
+                "num_ctx": 2048,
+                "top_k": 20,
+                "top_p": 0.9
+            }
         }
-    }
 
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
-                json=payload
-            )
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/chat",
+                    json=payload
+                )
 
-            if resp.status_code == 404:
-                return {
-                    "answer": f"Ollama model '{OLLAMA_MODEL}' was not found. Please run 'ollama pull {OLLAMA_MODEL}' in your terminal.",
-                    "sources": []
-                }
+                if resp.status_code == 404:
+                    return {
+                        "answer": f"Ollama model '{OLLAMA_MODEL}' was not found. Please run 'ollama pull {OLLAMA_MODEL}' in your terminal.",
+                        "sources": []
+                    }
 
-            resp.raise_for_status()
-            data = resp.json()
-            answer_text = data.get("message", {}).get("content", "").strip()
+                resp.raise_for_status()
+                data = resp.json()
+                answer_text = data.get("message", {}).get("content", "").strip()
 
-    except httpx.ConnectError:
-        return {
-            "answer": "Error: Ollama is not accessible at http://localhost:11434. Please start the local Ollama service.",
-            "sources": []
-        }
-    except Exception as e:
-        return {
-            "answer": f"Error communicating with local LLM: {str(e)}",
-            "sources": []
-        }
+        except httpx.ConnectError:
+            return {
+                "answer": "Error: Ollama is not accessible at http://localhost:11434. Please start the local Ollama service or set GROQ_API_KEY for cloud deployment.",
+                "sources": []
+            }
+        except Exception as e:
+            return {
+                "answer": f"Error communicating with LLM: {str(e)}",
+                "sources": []
+            }
 
     # Normalize response if model indicates insufficient information
     normalized_answer = answer_text.strip().strip('"').strip("'")
