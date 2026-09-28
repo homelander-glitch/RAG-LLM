@@ -56,15 +56,10 @@ app = FastAPI(
     version="2.0.0"
 )
 
-@app.on_event("startup")
-async def startup_warmup():
-    """Pre-warm embedding model and ChromaDB client on server boot."""
-    try:
-        from app.rag.retrieval import get_embedding_model, get_collection
-        get_embedding_model()
-        get_collection()
-    except Exception:
-        pass
+@app.get("/health")
+async def health_check():
+    """Fast healthcheck for cloud deployment platforms."""
+    return {"status": "ok"}
 
 app.add_middleware(
     CORSMiddleware,
