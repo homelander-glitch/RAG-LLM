@@ -1,5 +1,6 @@
 // Academic Document Intelligence - Complete Client Script
 
+const API_BASE = localStorage.getItem("academic_rag_api_base") || window.API_BASE_URL || "";
 let currentUser = null;
 let currentStudyMode = "explain";
 
@@ -75,7 +76,7 @@ function initAuth() {
         errElem.textContent = "";
 
         try {
-            const res = await fetch("/api/auth/login", {
+            const res = await fetch(`${API_BASE}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password })
@@ -109,7 +110,7 @@ function initAuth() {
         }
 
         try {
-            const res = await fetch("/api/auth/register", {
+            const res = await fetch(`${API_BASE}/api/auth/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name, email, password, confirm_password })
@@ -143,7 +144,7 @@ async function checkSession() {
     }
 
     try {
-        const res = await fetch("/api/auth/me", { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE}/api/auth/me`, { headers: getAuthHeader() });
         if (res.ok) {
             currentUser = await res.json();
             showApp();
@@ -212,7 +213,7 @@ function initChat() {
         const loadingElem = appendChatLoading();
 
         try {
-            const res = await fetch("/api/ask", {
+            const res = await fetch(`${API_BASE}/api/ask`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...getAuthHeader() },
                 body: JSON.stringify({ question })
@@ -236,7 +237,7 @@ function initChat() {
     clearBtn.addEventListener("click", async () => {
         if (!confirm("Clear conversation history?")) return;
         try {
-            await fetch("/api/history", { method: "DELETE", headers: getAuthHeader() });
+            await fetch(`${API_BASE}/api/history`, { method: "DELETE", headers: getAuthHeader() });
             const container = document.getElementById("chatMessages");
             container.innerHTML = `
                 <div id="chatWelcome" class="welcome-box">
@@ -316,7 +317,7 @@ function appendChatAi(answer, sources) {
 
 async function loadChatHistory() {
     try {
-        const res = await fetch("/api/history", { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE}/api/history`, { headers: getAuthHeader() });
         const history = await res.json();
         if (Array.isArray(history) && history.length > 0) {
             const welcome = document.getElementById("chatWelcome");
@@ -390,7 +391,7 @@ async function uploadDoc(file) {
     setDocStatus(`Processing & embedding "${file.name}"...`, "loading");
 
     try {
-        const res = await fetch("/api/upload", {
+        const res = await fetch(`${API_BASE}/api/upload`, {
             method: "POST",
             headers: getAuthHeader(),
             body: formData
@@ -428,7 +429,7 @@ function setDocStatus(msg, type) {
 async function loadDocuments() {
     const tbody = document.getElementById("documentsTableBody");
     try {
-        const res = await fetch("/api/documents", { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE}/api/documents`, { headers: getAuthHeader() });
         const docs = await res.json();
 
         if (!Array.isArray(docs) || docs.length === 0) {
@@ -464,7 +465,7 @@ async function deleteDoc(docId, filename) {
     if (!confirm(`Are you sure you want to delete "${filename}" and its vector embeddings?`)) return;
 
     try {
-        const res = await fetch(`/api/documents/${docId}`, { method: "DELETE", headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE}/api/documents/${docId}`, { method: "DELETE", headers: getAuthHeader() });
         if (res.ok) {
             loadDocuments();
         } else {
@@ -498,7 +499,7 @@ function initStudy() {
         output.innerHTML = '<div class="text-center text-muted">Analyzing document vectors and generating study notes...</div>';
 
         try {
-            const res = await fetch("/api/study", {
+            const res = await fetch(`${API_BASE}/api/study`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...getAuthHeader() },
                 body: JSON.stringify({ mode: currentStudyMode, topic })
@@ -531,7 +532,7 @@ function initSearch() {
         container.innerHTML = '<div class="text-center text-muted">Searching semantic vector index...</div>';
 
         try {
-            const res = await fetch("/api/search", {
+            const res = await fetch(`${API_BASE}/api/search`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...getAuthHeader() },
                 body: JSON.stringify({ query, top_k: 4 })
@@ -579,7 +580,7 @@ function initSettings() {
         statusElem.className = "upload-status-msg loading";
 
         try {
-            const res = await fetch("/api/reindex", { method: "POST", headers: getAuthHeader() });
+            const res = await fetch(`${API_BASE}/api/reindex`, { method: "POST", headers: getAuthHeader() });
             const data = await res.json();
             if (res.ok) {
                 statusElem.textContent = `Reindex complete: ${data.documents_reindexed} documents (${data.total_chunks_indexed} chunks).`;
@@ -598,7 +599,7 @@ function initSettings() {
 
 async function loadSettings() {
     try {
-        const res = await fetch("/api/settings", { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE}/api/settings`, { headers: getAuthHeader() });
         if (!res.ok) return;
         const cfg = await res.json();
 
@@ -643,7 +644,7 @@ async function openDocPreview(docId) {
     modal.style.display = "flex";
 
     try {
-        const res = await fetch(`/api/documents/${docId}/preview`, { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE}/api/documents/${docId}/preview`, { headers: getAuthHeader() });
         const data = await res.json();
 
         if (!res.ok) {
